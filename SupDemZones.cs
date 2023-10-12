@@ -34,7 +34,6 @@ namespace NinjaTrader.NinjaScript.Indicators.Infinity
 			public double l = 0.0;   // low
 			public int    b = 0;     // bar
 			public int    e = 0;     // end
-			public string n = "";	 // name
 			public string t = "";    // type
 			public string c = "";    // context
 			public bool   f = false; // flipped
@@ -48,16 +47,6 @@ namespace NinjaTrader.NinjaScript.Indicators.Infinity
 				this.t = t;
 				this.c = c;
 				this.a = a;
-				
-				if(t == "s")
-				{
-					this.n = b + "_" + h;
-				}
-				
-				if(t == "d")
-				{
-					this.n = b + "_" + l;
-				}
 			}
 		}
 		
@@ -65,9 +54,8 @@ namespace NinjaTrader.NinjaScript.Indicators.Infinity
 		
 		#region Variables
 		
-		private int minTicks = 1;
-		
-		private int  atrPeriod = 100;
+		private int  barIndex  = 0;
+		private int  atrPeriod = 10;
 		
 		// ---
 		
@@ -77,7 +65,7 @@ namespace NinjaTrader.NinjaScript.Indicators.Infinity
 		private int    con;
 		private double currLoCon,currHiCon;
 		
-		private double zr,zl,zh,br;
+		private double zr,zl,zh,br,zw;
 		private int    zb;
 		private string zt,zc;
 		private bool   za;
@@ -87,6 +75,15 @@ namespace NinjaTrader.NinjaScript.Indicators.Infinity
 		// --- //
 		
 		private List<Zone> Zones = new List<Zone>();
+		
+		// --- //
+		
+		private Separator menuSepa;
+		private MenuItem  menuItem;
+	    private MenuItem  menuItemActive;
+		private MenuItem  menuItemBroken;
+        private bool	  initOne;
+		private bool	  initTwo;
 		
 		#endregion
 		
@@ -107,14 +104,158 @@ namespace NinjaTrader.NinjaScript.Indicators.Infinity
 				ScaleJustification			= NinjaTrader.Gui.Chart.ScaleJustification.Right;
 				IsSuspendedWhileInactive	= true;
 				
-				demandZoneTemplate	= "d";
-				supplyZoneTemplate	= "s";
-				drawGlobal			= true;
+				useMTF				= false;
+				barType				= barTypes.Minute;
+				barPeriod 			= 30;
+				demandColor			= Brushes.YellowGreen;
+				supplyColor			= Brushes.Tomato;
+				activeLineOpacity	= 0.30f;
+				activeAreaOpacity	= 0.15f;
+				brokenLineOpacity	= 0.10f;
+				brokenAreaOpacity	= 0.05f;
+				lineWidth			= 1;
+				extendZones			= false;
+				hideActiveZones 	= false;
+				hideBrokenZones 	= true;
+				indicatorVersion	= "2.0 | Oct. 2023";
 			}
 			else if(State == State.Configure)
 			{
+				if(useMTF)
+				{
+					barIndex = 1;
+					AddDataSeries((BarsPeriodType)barType, barPeriod);
+				}
+				
 				SetZOrder(-7);
+				
+				if(!initOne)
+                {
+					menuSepa	   = new Separator();
+					menuItem	   = new MenuItem { Header = "Supply Demand Zones" };
+					menuItemActive = new MenuItem { Header = (hideActiveZones) ? "Show Active Zones" : "Hide Active Zones" };
+					menuItemBroken = new MenuItem { Header = (hideBrokenZones) ? "Show Broken Zones" : "Hide Broken Zones" };
+					
+					menuItemActive.Click += toggleActiveZones;
+			        menuItemBroken.Click += toggleBrokenZones;
+					
+					menuItem.Items.Add(menuItemActive);
+					menuItem.Items.Add(menuItemBroken);
+					
+					initOne = true;
+				}
 			}
+			else if(State == State.Terminated)
+			{
+				if(ChartControl == null || menuItem == null) return;
+				
+				try
+        		{
+					ChartControl.Dispatcher.InvokeAsync(() =>
+	                {
+						if(ChartControl.ContextMenu.Items.Contains(menuSepa)) ChartControl.ContextMenu.Items.Remove(menuSepa);
+						if(ChartControl.ContextMenu.Items.Contains(menuItem)) ChartControl.ContextMenu.Items.Remove(menuItem);
+					});
+					
+					if(menuItemActive == null || menuItemBroken == null) return;
+					
+					ChartControl.Dispatcher.InvokeAsync(() =>
+	                {
+						menuItemActive.Click -= toggleActiveZones;
+	                	menuItemBroken.Click -= toggleBrokenZones;
+					
+	                	ChartControl.ContextMenuOpening -= contextMenuOpening;
+	                	ChartControl.ContextMenuClosing -= contextMenuClosing;
+					});
+				}
+				catch(Exception e)
+		        {
+		            Console.WriteLine("Zones: '{0}'", e);
+		        }
+			}
+			
+			if(ChartControl == null) return;
+			
+			if(!initTwo)
+			{
+				try
+        		{
+					ChartControl.Dispatcher.InvokeAsync(() =>
+                	{
+				        ChartControl.ContextMenuOpening += contextMenuOpening;
+				    	ChartControl.ContextMenuClosing += contextMenuClosing;
+				    });
+					
+					initTwo = true;
+				}
+				catch(Exception e)
+		        {
+		            Console.WriteLine("Zones: '{0}'", e);
+		        }
+			}
+		}
+		
+		#endregion
+		
+		#region contextMenu
+		
+		// contextMenuOpening
+		//
+		private void contextMenuOpening(object sender, ContextMenuEventArgs e)
+        {
+			try
+        	{
+				ChartControl.ContextMenu.Items.Add(menuSepa);
+				ChartControl.ContextMenu.Items.Add(menuItem);
+			}
+			catch (Exception error)
+	        {
+	            Console.WriteLine("Burp: '{0}'", error);
+	        }
+        }
+		
+		// contextMenuClosing
+		//
+		private void contextMenuClosing(object sender, ContextMenuEventArgs e)
+        {
+			try
+        	{
+				if(ChartControl.ContextMenu.Items.Contains(menuSepa)) ChartControl.ContextMenu.Items.Remove(menuSepa);
+				if(ChartControl.ContextMenu.Items.Contains(menuItem)) ChartControl.ContextMenu.Items.Remove(menuItem);
+			}
+			catch (Exception error)
+	        {
+	            Console.WriteLine("Burp: '{0}'", error);
+	        }
+        }
+		
+		// toggleActiveZones
+		//
+		private void toggleActiveZones(object sender, RoutedEventArgs e)
+        {
+            hideActiveZones = !hideActiveZones;
+			menuItemActive.Header = (hideActiveZones) ? "Show Active Zones" : "Hide Active Zones";
+			ForceRefresh();
+        }
+		
+		// toggleBrokenZones
+		//
+		private void toggleBrokenZones(object sender, RoutedEventArgs e)
+        {
+            hideBrokenZones = !hideBrokenZones;
+			menuItemBroken.Header = (hideActiveZones) ? "Show Broken Zones" : "Hide Broken Zones";
+			ForceRefresh();
+        }
+		
+		#endregion
+		
+		#region DisplayName
+		
+		/// DisplayName
+		///
+		public override string DisplayName
+		{
+		    get { return "Supply Demand Zones"; }
 		}
 		
 		#endregion
@@ -125,21 +266,21 @@ namespace NinjaTrader.NinjaScript.Indicators.Infinity
 		//
 		protected override void OnBarUpdate()
 		{
-			if(CurrentBar < 20) { return; }
+			if(CurrentBars[barIndex] < 20) { return; }
 			
 			if(isDnSwing(3))
 			{
 				currHiBar = 3;
-				currHiVal = High[3];
+				currHiVal = Highs[barIndex][3];
 			}
 			
 			if(isUpSwing(3))
 			{
 				currLoBar = 3;
-				currLoVal = Low[3];
+				currLoVal = Lows[barIndex][3];
 			}
 			
-			atr = Instrument.MasterInstrument.RoundToTickSize(ATR(atrPeriod)[0] * 1.25);
+			atr = Instrument.MasterInstrument.RoundToTickSize(ATR(BarsArray[barIndex], atrPeriod)[0] * 1.25);
 			
 			checkSupply();
 			checkDemand();
@@ -150,54 +291,25 @@ namespace NinjaTrader.NinjaScript.Indicators.Infinity
 			
 			prevLoBar = currLoBar;
 			prevLoVal = currLoVal;
-			
-			if(CurrentBar >= Count - 2)
-			{
-				for(int i=0;i<Zones.Count;i++)
-				{
-					string templateName = (Zones[i].t == "s") ? supplyZoneTemplate : demandZoneTemplate;
-					Draw.Rectangle(this, Zones[i].n, CurrentBar - Zones[i].b, Zones[i].h, -100, Zones[i].l, drawGlobal, templateName);
-				}
-			}
 		}
 		
 		#endregion
 		
-		#region SwingMethods
+		#region isUpSwing
 		
 		// isUpSwing
 		//
 		private bool isUpSwing(int index)
 		{
 			if(
-			Low[index] <= Low[index-1] &&
-			Low[index] <= Low[index-2] &&
-			Low[index] <= Low[index-3] &&
-			Low[index] <= Low[index+1] &&
-			Low[index] <= Low[index+2] &&
-			Low[index] <= Low[index+3] &&
-			(Low[index] < Low[index-1] || Low[index] < Low[index-2] || Low[index] < Low[index-3]) &&
-			(Low[index] < Low[index+1] || Low[index] < Low[index+2] || Low[index] < Low[index+3])
-			) {
-				return true;
-			}
-			
-			return false;
-		}
-		
-		// isDnSwing
-		//
-		private bool isDnSwing(int index)
-		{
-			if(
-			High[index] >= High[index-1] &&
-			High[index] >= High[index-2] &&
-			High[index] >= High[index-3] &&
-			High[index] >= High[index+1] &&
-			High[index] >= High[index+2] &&
-			High[index] >= High[index+3] &&
-			(High[index] > High[index-1] || High[index] > High[index-2] || High[index] > High[index-3]) &&
-			(High[index] > High[index+1] || High[index] > High[index+2] || High[index] > High[index+3])
+			Lows[barIndex][index] <= Lows[barIndex][index-1] &&
+			Lows[barIndex][index] <= Lows[barIndex][index-2] &&
+			Lows[barIndex][index] <= Lows[barIndex][index-3] &&
+			Lows[barIndex][index] <= Lows[barIndex][index+1] &&
+			Lows[barIndex][index] <= Lows[barIndex][index+2] &&
+			Lows[barIndex][index] <= Lows[barIndex][index+3] &&
+			(Lows[barIndex][index] < Lows[barIndex][index-1] || Lows[barIndex][index] < Lows[barIndex][index-2] || Lows[barIndex][index] < Lows[barIndex][index-3]) &&
+			(Lows[barIndex][index] < Lows[barIndex][index+1] || Lows[barIndex][index] < Lows[barIndex][index+2] || Lows[barIndex][index] < Lows[barIndex][index+3])
 			) {
 				return true;
 			}
@@ -207,7 +319,31 @@ namespace NinjaTrader.NinjaScript.Indicators.Infinity
 		
 		#endregion
 		
-		#region Supply
+		#region isDnSwing
+		
+		// isDnSwing
+		//
+		private bool isDnSwing(int index)
+		{
+			if(
+			Highs[barIndex][index] >= Highs[barIndex][index-1] &&
+			Highs[barIndex][index] >= Highs[barIndex][index-2] &&
+			Highs[barIndex][index] >= Highs[barIndex][index-3] &&
+			Highs[barIndex][index] >= Highs[barIndex][index+1] &&
+			Highs[barIndex][index] >= Highs[barIndex][index+2] &&
+			Highs[barIndex][index] >= Highs[barIndex][index+3] &&
+			(Highs[barIndex][index] > Highs[barIndex][index-1] || Highs[barIndex][index] > Highs[barIndex][index-2] || Highs[barIndex][index] > Highs[barIndex][index-3]) &&
+			(Highs[barIndex][index] > Highs[barIndex][index+1] || Highs[barIndex][index] > Highs[barIndex][index+2] || Highs[barIndex][index] > Highs[barIndex][index+3])
+			) {
+				return true;
+			}
+			
+			return false;
+		}
+		
+		#endregion
+		
+		#region checkSupply
 		
 		// checkSupply
 		//
@@ -217,21 +353,25 @@ namespace NinjaTrader.NinjaScript.Indicators.Infinity
 			
 			if(currHiVal != prevHiVal)
 			{
-				if(MAX(High, currHiBar)[0] <= currHiVal)
+				if(MAX(Highs[barIndex], currHiBar)[0] <= currHiVal)
 				{
 					if(!activeSupplyZoneExists(currHiVal) && isValidSupplyZone(currHiVal, currLoVal))
 					{
-						br = High[currHiBar] - Low[currHiBar];
-						zr = High[currHiBar] - Math.Min(Open[currHiBar], Close[currHiBar]);
-						zh = currHiVal;
-					 	zl = (zr > atr) ? Math.Max(Open[currHiBar], Close[currHiBar]): Math.Min(Open[currHiBar], Close[currHiBar]);
-						zl = (zh - zl > atr) ? (zh - atr) : zl;
-						zl = (br < atr * 0.75) ? Low[currHiBar] : zl;
-						zl = (Math.Abs(zh - zl) < minTicks * TickSize) ? zh - minTicks * TickSize : zl;
-						zb = CurrentBar - currHiBar;
+						br = Highs[barIndex][currHiBar] - Lows[barIndex][currHiBar];
+						zr = Highs[barIndex][currHiBar] - Math.Min(Opens[barIndex][currHiBar], Closes[barIndex][currHiBar]);
+						zw = Highs[barIndex][currHiBar] - Math.Max(Opens[barIndex][currHiBar], Closes[barIndex][currHiBar]);
+					 	zh = currHiVal;
+						zl = zh - br;
+						zl = (br > atr * 1.25) ? zh - zr : zl;
+						zl = (zr > atr * 1.25) ? zh - zw : zl;
+						zl = (zw > atr * 1.25) ? zh - atr : zl;
+						zb = CurrentBars[barIndex] - currHiBar;
 						zt = "s";
 						zc = "r";
 						za = true;
+						
+						zl = (zh - zl < TickSize) ? (zh - TickSize) : zl;
+						//zl = (zh - zl > atr) ? (zh - atr) : zl;
 						
 						Zones.Add(new Zone(zl, zh, zb, zt, zc, za));
 					}
@@ -244,8 +384,8 @@ namespace NinjaTrader.NinjaScript.Indicators.Infinity
 			
 			if(con != -1)
 			{
-				currHiCon = MAX(High, con)[0];
-				currLoCon = MIN(Low, con)[1];
+				currHiCon = MAX(Highs[barIndex], con)[0];
+				currLoCon = MIN(Lows[barIndex], con)[1];
 				
 				if(currHiCon - currLoCon <= atr)
 				{
@@ -253,7 +393,7 @@ namespace NinjaTrader.NinjaScript.Indicators.Infinity
 					{
 						zl = currLoCon;
 						zh = currHiCon;
-						zb = CurrentBar - (con);
+						zb = CurrentBars[barIndex] - (con);
 						zt = "s";
 						zc = "c";
 						za = true;
@@ -265,6 +405,10 @@ namespace NinjaTrader.NinjaScript.Indicators.Infinity
 				}
 			}
 		}
+		
+		#endregion
+		
+		#region Supply
 		
 		// getNextSupplyZone
 		//
@@ -359,7 +503,7 @@ namespace NinjaTrader.NinjaScript.Indicators.Infinity
 						
 						for(int j=i;j>=1;j--)
 						{
-							if(Close[j] >= Open[j])
+							if(Closes[barIndex][j] >= Opens[barIndex][j])
 							{
 								val = true;
 								break;
@@ -386,9 +530,9 @@ namespace NinjaTrader.NinjaScript.Indicators.Infinity
 		private bool isDnMove(int index)
 		{
 			if(
-			Close[index]   < KeltnerChannel(1.0, 10).Lower[index]   ||
-			Close[index+1] < KeltnerChannel(1.0, 10).Lower[index+1] ||
-			Close[index+2] < KeltnerChannel(1.0, 10).Lower[index+2]
+			Closes[barIndex][index]   < KeltnerChannel(BarsArray[barIndex], 1.0, 10).Lower[index]   ||
+			Closes[barIndex][index+1] < KeltnerChannel(BarsArray[barIndex], 1.0, 10).Lower[index+1] ||
+			Closes[barIndex][index+2] < KeltnerChannel(BarsArray[barIndex], 1.0, 10).Lower[index+2]
 			) {
 				if(
 				isDnBar(index) &&
@@ -413,10 +557,10 @@ namespace NinjaTrader.NinjaScript.Indicators.Infinity
 		private bool isDnBar(int index)
 		{
 			if(
-			Close[index] < Open[index] &&
-			Close[index] < Close[index+1] &&
-			High[index]  < High[index+1] &&
-			Low[index]   < Low[index+1]
+			Closes[barIndex][index] < Opens[barIndex][index] &&
+			Closes[barIndex][index] < Closes[barIndex][index+1] &&
+			Highs[barIndex][index]  < Highs[barIndex][index+1] &&
+			Lows[barIndex][index]   < Lows[barIndex][index+1]
 			) {
 				return true;
 			}
@@ -429,21 +573,21 @@ namespace NinjaTrader.NinjaScript.Indicators.Infinity
 		private bool isStrongDnBar(int index)
 		{
 			if(
-			Close[index] < Open[index] &&
-			Close[index] < Close[index+1] &&
-			High[index]  < High[index+1] &&
-			Low[index]   < Low[index+1] &&
-			Low[index]   < MIN(Low, 3)[index+1] &&
-			High[index]  - Low[index] > ATR(atrPeriod)[1]
+			Closes[barIndex][index] < Opens[barIndex][index] &&
+			Closes[barIndex][index] < Closes[barIndex][index+1] &&
+			Highs[barIndex][index]  < Highs[barIndex][index+1] &&
+			Lows[barIndex][index]   < Lows[barIndex][index+1] &&
+			Lows[barIndex][index]   < MIN(Lows[barIndex], 3)[index+1] &&
+			Highs[barIndex][index]  - Lows[barIndex][index] > ATR(BarsArray[barIndex], atrPeriod)[1]
 			) {
 				return true;
 			}
 			
 			if(
-			Close[index] < Open[index] &&
-			Close[index] < Close[index+1] &&
-			Close[index] < MIN(Low, 3)[index+1] &&
-			High[index]  - Low[index] > ATR(atrPeriod)[1] * 2
+			Closes[barIndex][index] < Opens[barIndex][index] &&
+			Closes[barIndex][index] < Closes[barIndex][index+1] &&
+			Closes[barIndex][index] < MIN(Lows[barIndex], 3)[index+1] &&
+			Highs[barIndex][index]  - Lows[barIndex][index] > ATR(BarsArray[barIndex], atrPeriod)[1] * 2
 			) {
 				return true;
 			}
@@ -456,8 +600,8 @@ namespace NinjaTrader.NinjaScript.Indicators.Infinity
 		private bool isInsideDnBar(int indexOne, int indexTwo)
 		{
 			if(
-			High[indexOne] <= High[indexTwo] &&
-			Math.Min(Open[indexOne], Close[indexOne]) >= Low[indexTwo]
+			Highs[barIndex][indexOne] <= Highs[barIndex][indexTwo] &&
+			Math.Min(Opens[barIndex][indexOne], Closes[barIndex][indexOne]) >= Lows[barIndex][indexTwo]
 			) {
 				return true;
 			}
@@ -470,9 +614,9 @@ namespace NinjaTrader.NinjaScript.Indicators.Infinity
 		private bool isInsideDnBreakoutBar(int indexOne, int indexTwo)
 		{
 			if(
-			High[indexOne]  <= High[indexTwo] &&
-			Close[indexOne] <  MIN(Low, indexTwo-indexOne)[1] &&
-			Low[indexOne]   <  MIN(Low, indexTwo-indexOne)[1]
+			Highs[barIndex][indexOne]  <= Highs[barIndex][indexTwo] &&
+			Closes[barIndex][indexOne] <= MIN(Lows[barIndex], indexTwo-indexOne)[1] &&
+			Lows[barIndex][indexOne]   <  MIN(Lows[barIndex], indexTwo-indexOne)[1]
 			) {
 				return true;
 			}
@@ -482,7 +626,7 @@ namespace NinjaTrader.NinjaScript.Indicators.Infinity
 		
 		#endregion
 		
-		#region Demand
+		#region checkDemand
 		
 		// checkDemand
 		//
@@ -492,21 +636,25 @@ namespace NinjaTrader.NinjaScript.Indicators.Infinity
 			
 			if(currLoVal != prevLoVal)
 			{
-				if(MIN(Low, currLoBar)[0] >= currLoVal)
+				if(MIN(Lows[barIndex], currLoBar)[0] >= currLoVal)
 				{
 					if(!activeDemandZoneExists(currLoVal) && isValidDemandZone(currHiVal, currLoVal))
 					{
-						br = High[currHiBar] - Low[currHiBar];
-						zr = Math.Max(Open[currLoBar], Close[currLoBar]) - Low[currHiBar];
+						br = Highs[barIndex][currHiBar] - Lows[barIndex][currHiBar];
+						zr = Math.Max(Opens[barIndex][currLoBar], Closes[barIndex][currLoBar]) - Lows[barIndex][currHiBar];
+						zw = Math.Min(Opens[barIndex][currLoBar], Closes[barIndex][currLoBar]) - Lows[barIndex][currHiBar];
 						zl = currLoVal;
-						zh = (zr > atr) ? Math.Min(Open[currLoBar], Close[currLoBar]) : Math.Max(Open[currLoBar], Close[currLoBar]);
-						zh = (zh - zl > atr) ? (zl + atr) : zh;
-						zh = (br < atr * 0.75) ? High[currHiBar] : zh;
-						zh = (Math.Abs(zh - zl) < minTicks * TickSize) ? zl + minTicks * TickSize : zh;
-						zb = CurrentBar - currLoBar;
+						zh = currLoVal + br;
+						zh = (br > atr * 1.25) ? zl + zr : zh;
+						zh = (zr > atr * 1.25) ? zl + zw : zh;
+						zh = (zw > atr * 1.25) ? zl + atr : zh;
+						zb = CurrentBars[barIndex] - currLoBar;
 						zt = "d";
 						zc = "r";
 						za = true;
+						
+						zh = (zh - zl < TickSize) ? (zl + TickSize) : zh;
+						zh = (zh - zl > atr) ? (zl + atr) : zh;
 						
 						Zones.Add(new Zone(zl, zh, zb, zt, zc, za));
 					}
@@ -519,8 +667,8 @@ namespace NinjaTrader.NinjaScript.Indicators.Infinity
 			
 			if(con != -1)
 			{
-				currHiCon = MAX(High, con)[1];
-				currLoCon = MIN(Low, con)[0];
+				currHiCon = MAX(Highs[barIndex], con)[1];
+				currLoCon = MIN(Lows[barIndex], con)[0];
 				
 				if(currHiCon - currLoCon <= atr)
 				{
@@ -528,18 +676,22 @@ namespace NinjaTrader.NinjaScript.Indicators.Infinity
 					{
 						zl = currLoCon;
 						zh = currHiCon;
-						zb = CurrentBar - (con);
+						zb = CurrentBars[barIndex] - (con);
 						zt = "d";
 						zc = "c";
 						za = true;
 						
 						zh = (zh - zl < TickSize) ? (zl + TickSize) : zh;
 						
-						Zones.Add(new Zone(zl, zh, zb, zt, zc, za));
+						//Zones.Add(new Zone(zl, zh, zb, zt, zc, za));
 					}
 				}
 			}
 		}
+		
+		#endregion
+		
+		#region Demand
 		
 		// getNextDemandZone
 		//
@@ -634,7 +786,7 @@ namespace NinjaTrader.NinjaScript.Indicators.Infinity
 						
 						for(int j=i;j>=1;j--)
 						{
-							if(Close[j] <= Open[j])
+							if(Closes[barIndex][j] <= Opens[barIndex][j])
 							{
 								val = true;
 								break;
@@ -661,9 +813,9 @@ namespace NinjaTrader.NinjaScript.Indicators.Infinity
 		private bool isUpMove(int index)
 		{
 			if(
-			Close[index]   > KeltnerChannel(1.0, 10).Upper[index]   ||
-			Close[index+1] > KeltnerChannel(1.0, 10).Upper[index+1] ||
-			Close[index+2] > KeltnerChannel(1.0, 10).Upper[index+2]
+			Closes[barIndex][index]   > KeltnerChannel(BarsArray[barIndex], 1.0, 10).Upper[index]   ||
+			Closes[barIndex][index+1] > KeltnerChannel(BarsArray[barIndex], 1.0, 10).Upper[index+1] ||
+			Closes[barIndex][index+2] > KeltnerChannel(BarsArray[barIndex], 1.0, 10).Upper[index+2]
 			) {
 				if(
 				isUpBar(index) &&
@@ -688,10 +840,10 @@ namespace NinjaTrader.NinjaScript.Indicators.Infinity
 		private bool isUpBar(int index)
 		{
 			if(
-			Close[index] > Open[index] &&
-			Close[index] > Close[index+1] &&
-			High[index]  > High[index+1] &&
-			Low[index]   > Low[index+1]
+			Closes[barIndex][index] > Opens[barIndex][index] &&
+			Closes[barIndex][index] > Closes[barIndex][index+1] &&
+			Highs[barIndex][index]  > Highs[barIndex][index+1] &&
+			Lows[barIndex][index]   > Lows[barIndex][index+1]
 			) {
 				return true;
 			}
@@ -704,21 +856,21 @@ namespace NinjaTrader.NinjaScript.Indicators.Infinity
 		private bool isStrongUpBar(int index)
 		{
 			if(
-			Close[index] > Open[index] &&
-			Close[index] > Close[index+1] &&
-			High[index]  > High[index+1] &&
-			Low[index]   > Low[index+1] &&
-			High[index]  > MAX(High, 3)[index+1] &&
-			High[index]  - Low[index] > ATR(atrPeriod)[1]
+			Closes[barIndex][index] > Opens[barIndex][index] &&
+			Closes[barIndex][index] > Closes[barIndex][index+1] &&
+			Highs[barIndex][index]  > Highs[barIndex][index+1] &&
+			Lows[barIndex][index]   > Lows[barIndex][index+1] &&
+			Highs[barIndex][index]  > MAX(Highs[barIndex], 3)[index+1] &&
+			Highs[barIndex][index]  - Lows[barIndex][index] > ATR(BarsArray[barIndex], atrPeriod)[1]
 			) {
 				return true;
 			}
 			
 			if(
-			Close[index] > Open[index] &&
-			Close[index] > Close[index+1] &&
-			Close[index] > MAX(High, 3)[index+1] &&
-			High[index]  - Low[index] > ATR(atrPeriod)[1] * 2
+			Closes[barIndex][index] > Opens[barIndex][index] &&
+			Closes[barIndex][index] > Closes[barIndex][index+1] &&
+			Closes[barIndex][index] > MAX(Highs[barIndex], 3)[index+1] &&
+			Highs[barIndex][index]  - Lows[barIndex][index] > ATR(BarsArray[barIndex], atrPeriod)[1] * 2
 			) {
 				return true;
 			}
@@ -731,8 +883,9 @@ namespace NinjaTrader.NinjaScript.Indicators.Infinity
 		private bool isInsideUpBar(int indexOne, int indexTwo)
 		{
 			if(
-			Low[indexOne] >= Low[indexTwo] &&
-			Math.Max(Open[indexOne], Close[indexOne]) <= High[indexTwo]
+			Lows[barIndex][indexOne]  >= Lows[barIndex][indexTwo] &&
+			Highs[barIndex][indexOne] <= Highs[barIndex][indexTwo] &&
+			Math.Max(Opens[barIndex][indexOne], Closes[barIndex][indexOne]) <= Highs[barIndex][indexTwo]
 			) {
 				return true;
 			}
@@ -745,9 +898,9 @@ namespace NinjaTrader.NinjaScript.Indicators.Infinity
 		private bool isInsideUpBreakoutBar(int indexOne, int indexTwo)
 		{
 			if(
-			Low[indexOne]   >= Low[indexTwo] &&
-			Close[indexOne] >  MAX(High, indexTwo-indexOne)[1] &&
-			High[indexOne]  >  MAX(High, indexTwo-indexOne)[1]
+			Lows[barIndex][indexOne]   >= Lows[barIndex][indexTwo] &&
+			Closes[barIndex][indexOne] >= MAX(Highs[barIndex], indexTwo-indexOne)[1] &&
+			Highs[barIndex][indexOne]  >  MAX(Highs[barIndex], indexTwo-indexOne)[1]
 			) {
 				return true;
 			}
@@ -763,34 +916,29 @@ namespace NinjaTrader.NinjaScript.Indicators.Infinity
 		//
 		private void updateZones()
 		{
-			for(int i=Zones.Count-1;i>=0;i--)
+			for(int i=0;i<Zones.Count;i++)
 			{
-				string n = Zones[i].n;
-				
 				if(Zones[i].a == true)
 				{
 					if(Zones[i].t == "s")
 					{
-						if(High[0] > Zones[i].h)
+						if(Highs[barIndex][0] > Zones[i].h)
 						{
-							RemoveDrawObject(n);
-							Zones.RemoveAt(i);
-							continue;
+							Zones[i].e = CurrentBars[barIndex];
+							Zones[i].a = false;
 						}
 					}
 					
 					if(Zones[i].t == "d")
 					{
-						if(Low[0] < Zones[i].l)
+						if(Lows[barIndex][0] < Zones[i].l)
 						{
-							RemoveDrawObject(n);
-							Zones.RemoveAt(i);
-							continue;
+							Zones[i].e = CurrentBars[barIndex];
+							Zones[i].a = false;
 						}
 					}
 				}
 			}
-			
 		}
 		
 		#endregion
@@ -806,29 +954,332 @@ namespace NinjaTrader.NinjaScript.Indicators.Infinity
 		
 		#endregion
 		
+		#region findBar
+		
+		// findBar
+		//
+		private int findBar(Zone z)
+		{
+			int curr = BarsArray[0].GetBar(BarsArray[1].GetTime(z.b));
+			int prev = BarsArray[0].GetBar(BarsArray[1].GetTime(z.b - 1));
+			int rVal = curr;
+			
+			for(int i=prev;i<=curr;i++)
+			{
+				if(z.t == "s")
+				{
+					if(BarsArray[0].GetHigh(i) == z.h)
+					{
+						rVal = i;
+						break;
+					}
+				}
+				
+				if(z.t == "d")
+				{
+					if(BarsArray[0].GetLow(i) == z.l)
+					{
+						rVal = i;
+						break;
+					}
+				}
+			}
+				
+			return rVal;
+		}
+		
+		#endregion
+		
+		#region OnRender
+		
+		// OnRender
+		//
+		protected override void OnRender(ChartControl chartControl, ChartScale chartScale)
+		{
+			if(Bars == null || Bars.Instrument == null || IsInHitTest) { return; }
+			
+			base.OnRender(chartControl, chartScale);
+			
+			drawZones(chartControl, chartScale);
+		}
+		
+		#endregion
+		
+		#region drawZones
+		
+		// drawZones
+		//
+		private void drawZones(ChartControl chartControl, ChartScale chartScale)
+		{
+			if(hideActiveZones && hideBrokenZones) { return; }
+			if(Zones.Count == 0) { return; }
+			
+			SharpDX.Direct2D1.AntialiasMode oldAntialiasMode = RenderTarget.AntialiasMode;
+			RenderTarget.AntialiasMode = SharpDX.Direct2D1.AntialiasMode.Aliased;
+			
+			SharpDX.Direct2D1.Brush demandBrush = demandColor.ToDxBrush(RenderTarget);
+			SharpDX.Direct2D1.Brush supplyBrush = supplyColor.ToDxBrush(RenderTarget);
+			
+			int x1 = 0;
+			int x2 = 0;
+			int y1 = 0;
+			int y2 = 0;
+			
+			int wd = (int)(chartControl.BarWidth / 2.0) + (int)(chartControl.BarMarginLeft / 2.0);
+			
+			for(int i=0;i<Zones.Count;i++)
+			{
+				if(Zones[i].a == true && hideActiveZones)
+				{
+					continue;
+				}
+				if(Zones[i].a == false && hideBrokenZones)
+				{
+					continue;
+				}
+				
+				if(barIndex == 0)
+				{
+					x1 = ChartControl.GetXByBarIndex(ChartBars, Zones[i].b);
+					x2 = (Zones[i].a == false) ? ChartControl.GetXByBarIndex(ChartBars, Zones[i].e) : (int)(ChartControl.GetXByBarIndex(ChartBars, ChartBars.ToIndex) + wd);
+					x2 = (Zones[i].a == true && extendZones) ? chartControl.CanvasRight: x2;
+				}
+				else
+				{
+					x1 = ChartControl.GetXByBarIndex(ChartBars, findBar(Zones[i]));
+					//x1 = ChartControl.GetXByBarIndex(ChartBars, BarsArray[0].GetBar(BarsArray[1].GetTime(Zones[i].b)));
+					x2 = (Zones[i].a == false) ? ChartControl.GetXByBarIndex(ChartBars, ChartBars.GetBarIdxByTime(chartControl, BarsArray[1].GetTime(Zones[i].e))) : (int)(ChartControl.GetXByBarIndex(ChartBars, ChartBars.ToIndex) + wd);
+					x2 = (Zones[i].a == true && extendZones) ? chartControl.CanvasRight: x2;
+				}
+				
+				if(x2 < x1) { continue; }
+				
+				y1 = chartScale.GetYByValue(Zones[i].h);
+				y2 = chartScale.GetYByValue(Zones[i].l);
+				
+				// area
+				
+				SharpDX.RectangleF rect = new SharpDX.RectangleF();
+	 			
+				rect.X      = (float)x1;
+				rect.Y      = (float)y1;
+				rect.Width  = (float)Math.Abs(x2 - x1);
+				rect.Height = (float)Math.Abs(y1 - y2) - 1;
+				
+				if(Zones[i].a == true)
+				{
+					demandBrush.Opacity = activeAreaOpacity;
+					supplyBrush.Opacity = activeAreaOpacity;
+				}
+				else
+				{
+					demandBrush.Opacity = brokenAreaOpacity;
+					supplyBrush.Opacity = brokenAreaOpacity;
+				}
+				
+				if(Zones[i].t == "d")
+				{
+					RenderTarget.FillRectangle(rect, demandBrush);
+				}
+				
+				if(Zones[i].t == "s")
+				{
+					RenderTarget.FillRectangle(rect, supplyBrush);
+				}
+				
+				// line one
+				
+				if(Zones[i].a == true)
+				{
+					demandBrush.Opacity = activeLineOpacity;
+					supplyBrush.Opacity = activeLineOpacity;
+				}
+				else
+				{
+					demandBrush.Opacity = brokenLineOpacity;
+					supplyBrush.Opacity = brokenLineOpacity;
+				}
+				
+				SharpDX.Vector2 pOne = new SharpDX.Vector2();
+				SharpDX.Vector2 pTwo = new SharpDX.Vector2();
+				
+				pOne.X = (float)x1;
+				pOne.Y = (float)y1;
+				pTwo.X = (float)x2;
+				pTwo.Y = (float)y1;
+				
+				if(Zones[i].t == "d")
+				{
+					RenderTarget.DrawLine(pOne, pTwo, demandBrush, lineWidth);
+				}
+				
+				if(Zones[i].t == "s")
+				{
+					RenderTarget.DrawLine(pOne, pTwo, supplyBrush, lineWidth);
+				}
+				
+				// line two
+				
+				pOne.X = (float)x1;
+				pOne.Y = (float)y2;
+				pTwo.X = (float)x2;
+				pTwo.Y = (float)y2;
+				
+				if(Zones[i].t == "d")
+				{
+					RenderTarget.DrawLine(pOne, pTwo, demandBrush, lineWidth);
+				}
+				
+				if(Zones[i].t == "s")
+				{
+					RenderTarget.DrawLine(pOne, pTwo, supplyBrush, lineWidth);
+				}
+			}
+			
+			RenderTarget.AntialiasMode = oldAntialiasMode;
+			
+			// ---
+			
+			demandBrush.Dispose();
+			supplyBrush.Dispose();
+		}
+		
+		#endregion
+		
 		#region Poperties
 		
 		[NinjaScriptProperty]
-		[Display(Name = "Supply Template Name", GroupName = "1.0 Zone Parameters", Order = 0)]
-		public string supplyZoneTemplate
+		[Display(Name = "Use MTF", GroupName = "1.0 MTF Parameters", Order = 0)]
+		public bool useMTF
 		{ get; set; }
 		
 		// ---
 		
 		[NinjaScriptProperty]
-		[Display(Name = "Demand Template Name", GroupName = "1.0 Zone Parameters", Order = 1)]
-		public string demandZoneTemplate
+		[Display(Name = "Bar Type", GroupName = "1.0 MTF Parameters", Order = 1)]
+		public barTypes barType
 		{ get; set; }
 		
 		// ---
 		
 		[NinjaScriptProperty]
-		[Display(Name = "Draw Global", GroupName = "1.0 Zone Parameters", Order = 7)]
-		public bool drawGlobal
+		[Range(1, int.MaxValue)]
+		[Display(Name = "Bar Period", GroupName = "1.0 MTF Parameters", Order = 2)]
+		public int barPeriod
+		{ get; set; }
+		
+		// ---
+		
+		[NinjaScriptProperty]
+		[XmlIgnore]
+		[Display(Name = "Demand Color", GroupName = "2.0 Zone Parameters", Order = 0)]
+		public Brush demandColor
+		{ get; set; }
+		
+		[Browsable(false)]
+		public string demandColorSerializable
+		{
+			get { return Serialize.BrushToString(demandColor); }
+			set { demandColor = Serialize.StringToBrush(value); }
+		}
+		
+		// ---
+		
+		[NinjaScriptProperty]
+		[XmlIgnore]
+		[Display(Name = "Supply Color", GroupName = "2.0 Zone Parameters", Order = 1)]
+		public Brush supplyColor
+		{ get; set; }
+		
+		[Browsable(false)]
+		public string supplyColorSerializable
+		{
+			get { return Serialize.BrushToString(supplyColor); }
+			set { supplyColor = Serialize.StringToBrush(value); }
+		}
+		
+		// ---
+		
+		[NinjaScriptProperty]
+		[Range(0.0, 1.0)]
+		[Display(Name = "Active Zone Line Opacity", GroupName = "2.0 Zone Parameters", Order = 2)]
+		public float activeLineOpacity
+		{ get; set; }
+		
+		// ---
+		
+		[NinjaScriptProperty]
+		[Range(0.0, 1.0)]
+		[Display(Name = "Active Zone Area Opacity", GroupName = "2.0 Zone Parameters", Order = 3)]
+		public float activeAreaOpacity
+		{ get; set; }
+		
+		// ---
+		
+		[NinjaScriptProperty]
+		[Range(0.0, 1.0)]
+		[Display(Name = "Broken Zone Line Opacity", GroupName = "2.0 Zone Parameters", Order = 4)]
+		public float brokenLineOpacity
+		{ get; set; }
+		
+		// ---
+		
+		[NinjaScriptProperty]
+		[Range(0.0, 1.0)]
+		[Display(Name = "Broken Zone Area Opacity", GroupName = "2.0 Zone Parameters", Order = 5)]
+		public float brokenAreaOpacity
+		{ get; set; }
+		
+		// ---
+		
+		[NinjaScriptProperty]
+		[Range(1, int.MaxValue)]
+		[Display(Name = "Line Width", GroupName = "2.0 Zone Parameters", Order = 6)]
+		public int lineWidth
+		{ get; set; }
+		
+		// ---
+		
+		[NinjaScriptProperty]
+		[Display(Name = "Extend Zones", GroupName = "2.0 Zone Parameters", Order = 7)]
+		public bool extendZones
+		{ get; set; }
+		
+		// ---
+		
+		[NinjaScriptProperty]
+		[Display(Name = "Hide Active Zones", GroupName = "2.0 Zone Parameters", Order = 8)]
+		public bool hideActiveZones
+		{ get; set; }
+		
+		// ---
+		
+		[NinjaScriptProperty]
+		[Display(Name = "Hide Broken Zones", GroupName = "2.0 Zone Parameters", Order = 9)]
+		public bool hideBrokenZones
+		{ get; set; }
+		
+		// ---
+		
+		[NinjaScriptProperty]
+		[ReadOnly(true)]
+		[Display(Name = "Indicator Version", GroupName = "2.0 Zone Parameters", Order = 10)]
+		public string indicatorVersion
 		{ get; set; }
 		
 		#endregion
 	}
+}
+
+public enum barTypes
+{
+	Day     	= BarsPeriodType.Day,
+	Minute  	= BarsPeriodType.Minute,
+	Range   	= BarsPeriodType.Range,
+	Second  	= BarsPeriodType.Second,
+	Tick    	= BarsPeriodType.Tick,
+	Volume  	= BarsPeriodType.Volume,
+	Renko   	= BarsPeriodType.Renko
 }
 
 #region NinjaScript generated code. Neither change nor remove.
@@ -838,18 +1289,18 @@ namespace NinjaTrader.NinjaScript.Indicators
 	public partial class Indicator : NinjaTrader.Gui.NinjaScript.IndicatorRenderBase
 	{
 		private Infinity.SupDemZones[] cacheSupDemZones;
-		public Infinity.SupDemZones SupDemZones(string supplyZoneTemplate, string demandZoneTemplate, bool drawGlobal)
+		public Infinity.SupDemZones SupDemZones(bool useMTF, barTypes barType, int barPeriod, Brush demandColor, Brush supplyColor, float activeLineOpacity, float activeAreaOpacity, float brokenLineOpacity, float brokenAreaOpacity, int lineWidth, bool extendZones, bool hideActiveZones, bool hideBrokenZones, string indicatorVersion)
 		{
-			return SupDemZones(Input, supplyZoneTemplate, demandZoneTemplate, drawGlobal);
+			return SupDemZones(Input, useMTF, barType, barPeriod, demandColor, supplyColor, activeLineOpacity, activeAreaOpacity, brokenLineOpacity, brokenAreaOpacity, lineWidth, extendZones, hideActiveZones, hideBrokenZones, indicatorVersion);
 		}
 
-		public Infinity.SupDemZones SupDemZones(ISeries<double> input, string supplyZoneTemplate, string demandZoneTemplate, bool drawGlobal)
+		public Infinity.SupDemZones SupDemZones(ISeries<double> input, bool useMTF, barTypes barType, int barPeriod, Brush demandColor, Brush supplyColor, float activeLineOpacity, float activeAreaOpacity, float brokenLineOpacity, float brokenAreaOpacity, int lineWidth, bool extendZones, bool hideActiveZones, bool hideBrokenZones, string indicatorVersion)
 		{
 			if (cacheSupDemZones != null)
 				for (int idx = 0; idx < cacheSupDemZones.Length; idx++)
-					if (cacheSupDemZones[idx] != null && cacheSupDemZones[idx].supplyZoneTemplate == supplyZoneTemplate && cacheSupDemZones[idx].demandZoneTemplate == demandZoneTemplate && cacheSupDemZones[idx].drawGlobal == drawGlobal && cacheSupDemZones[idx].EqualsInput(input))
+					if (cacheSupDemZones[idx] != null && cacheSupDemZones[idx].useMTF == useMTF && cacheSupDemZones[idx].barType == barType && cacheSupDemZones[idx].barPeriod == barPeriod && cacheSupDemZones[idx].demandColor == demandColor && cacheSupDemZones[idx].supplyColor == supplyColor && cacheSupDemZones[idx].activeLineOpacity == activeLineOpacity && cacheSupDemZones[idx].activeAreaOpacity == activeAreaOpacity && cacheSupDemZones[idx].brokenLineOpacity == brokenLineOpacity && cacheSupDemZones[idx].brokenAreaOpacity == brokenAreaOpacity && cacheSupDemZones[idx].lineWidth == lineWidth && cacheSupDemZones[idx].extendZones == extendZones && cacheSupDemZones[idx].hideActiveZones == hideActiveZones && cacheSupDemZones[idx].hideBrokenZones == hideBrokenZones && cacheSupDemZones[idx].indicatorVersion == indicatorVersion && cacheSupDemZones[idx].EqualsInput(input))
 						return cacheSupDemZones[idx];
-			return CacheIndicator<Infinity.SupDemZones>(new Infinity.SupDemZones(){ supplyZoneTemplate = supplyZoneTemplate, demandZoneTemplate = demandZoneTemplate, drawGlobal = drawGlobal }, input, ref cacheSupDemZones);
+			return CacheIndicator<Infinity.SupDemZones>(new Infinity.SupDemZones(){ useMTF = useMTF, barType = barType, barPeriod = barPeriod, demandColor = demandColor, supplyColor = supplyColor, activeLineOpacity = activeLineOpacity, activeAreaOpacity = activeAreaOpacity, brokenLineOpacity = brokenLineOpacity, brokenAreaOpacity = brokenAreaOpacity, lineWidth = lineWidth, extendZones = extendZones, hideActiveZones = hideActiveZones, hideBrokenZones = hideBrokenZones, indicatorVersion = indicatorVersion }, input, ref cacheSupDemZones);
 		}
 	}
 }
@@ -858,14 +1309,14 @@ namespace NinjaTrader.NinjaScript.MarketAnalyzerColumns
 {
 	public partial class MarketAnalyzerColumn : MarketAnalyzerColumnBase
 	{
-		public Indicators.Infinity.SupDemZones SupDemZones(string supplyZoneTemplate, string demandZoneTemplate, bool drawGlobal)
+		public Indicators.Infinity.SupDemZones SupDemZones(bool useMTF, barTypes barType, int barPeriod, Brush demandColor, Brush supplyColor, float activeLineOpacity, float activeAreaOpacity, float brokenLineOpacity, float brokenAreaOpacity, int lineWidth, bool extendZones, bool hideActiveZones, bool hideBrokenZones, string indicatorVersion)
 		{
-			return indicator.SupDemZones(Input, supplyZoneTemplate, demandZoneTemplate, drawGlobal);
+			return indicator.SupDemZones(Input, useMTF, barType, barPeriod, demandColor, supplyColor, activeLineOpacity, activeAreaOpacity, brokenLineOpacity, brokenAreaOpacity, lineWidth, extendZones, hideActiveZones, hideBrokenZones, indicatorVersion);
 		}
 
-		public Indicators.Infinity.SupDemZones SupDemZones(ISeries<double> input , string supplyZoneTemplate, string demandZoneTemplate, bool drawGlobal)
+		public Indicators.Infinity.SupDemZones SupDemZones(ISeries<double> input , bool useMTF, barTypes barType, int barPeriod, Brush demandColor, Brush supplyColor, float activeLineOpacity, float activeAreaOpacity, float brokenLineOpacity, float brokenAreaOpacity, int lineWidth, bool extendZones, bool hideActiveZones, bool hideBrokenZones, string indicatorVersion)
 		{
-			return indicator.SupDemZones(input, supplyZoneTemplate, demandZoneTemplate, drawGlobal);
+			return indicator.SupDemZones(input, useMTF, barType, barPeriod, demandColor, supplyColor, activeLineOpacity, activeAreaOpacity, brokenLineOpacity, brokenAreaOpacity, lineWidth, extendZones, hideActiveZones, hideBrokenZones, indicatorVersion);
 		}
 	}
 }
@@ -874,14 +1325,14 @@ namespace NinjaTrader.NinjaScript.Strategies
 {
 	public partial class Strategy : NinjaTrader.Gui.NinjaScript.StrategyRenderBase
 	{
-		public Indicators.Infinity.SupDemZones SupDemZones(string supplyZoneTemplate, string demandZoneTemplate, bool drawGlobal)
+		public Indicators.Infinity.SupDemZones SupDemZones(bool useMTF, barTypes barType, int barPeriod, Brush demandColor, Brush supplyColor, float activeLineOpacity, float activeAreaOpacity, float brokenLineOpacity, float brokenAreaOpacity, int lineWidth, bool extendZones, bool hideActiveZones, bool hideBrokenZones, string indicatorVersion)
 		{
-			return indicator.SupDemZones(Input, supplyZoneTemplate, demandZoneTemplate, drawGlobal);
+			return indicator.SupDemZones(Input, useMTF, barType, barPeriod, demandColor, supplyColor, activeLineOpacity, activeAreaOpacity, brokenLineOpacity, brokenAreaOpacity, lineWidth, extendZones, hideActiveZones, hideBrokenZones, indicatorVersion);
 		}
 
-		public Indicators.Infinity.SupDemZones SupDemZones(ISeries<double> input , string supplyZoneTemplate, string demandZoneTemplate, bool drawGlobal)
+		public Indicators.Infinity.SupDemZones SupDemZones(ISeries<double> input , bool useMTF, barTypes barType, int barPeriod, Brush demandColor, Brush supplyColor, float activeLineOpacity, float activeAreaOpacity, float brokenLineOpacity, float brokenAreaOpacity, int lineWidth, bool extendZones, bool hideActiveZones, bool hideBrokenZones, string indicatorVersion)
 		{
-			return indicator.SupDemZones(input, supplyZoneTemplate, demandZoneTemplate, drawGlobal);
+			return indicator.SupDemZones(input, useMTF, barType, barPeriod, demandColor, supplyColor, activeLineOpacity, activeAreaOpacity, brokenLineOpacity, brokenAreaOpacity, lineWidth, extendZones, hideActiveZones, hideBrokenZones, indicatorVersion);
 		}
 	}
 }
