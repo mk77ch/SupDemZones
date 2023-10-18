@@ -16,38 +16,75 @@ using NinjaTrader.Gui.Chart;
 namespace NinjaTrader.NinjaScript.DrawingTools
 {
 	[CLSCompliant(false)]
-	public abstract class SupplyZone : DrawingTool
+	public class SupplyZone : DrawingTool
 	{
 		#region Variables
 		
-		private				int							areaOpacity			= 15;
-		private				Brush						areaBrush			= Brushes.Coral;
-		private	readonly	DeviceBrush					areaBrushDevice		= new DeviceBrush();
-		private	const		double						cursorSensitivity	= 15;
-		private				ChartAnchor 				editingAnchor;
-		private				bool						hasSetZOrder;
-		private				bool						extendZone			= true;
-		private				string 						labelText			= "M15";
-		private				int							labelSize			= 0;
-		private 			Brush 						labelBrush			= Brushes.Coral;
-		private	readonly	DeviceBrush					labelBrushDevice	= new DeviceBrush();
-		private 			int							labelOpacity		= 30;
-		private 			int							labelOffset			= 0;
+		private			 int		 areaOpacity	   = 15;
+		private			 Brush		 areaBrush		   = Brushes.Coral;
+		private	readonly DeviceBrush areaBrushDevice   = new DeviceBrush();
+		private	const	 double		 cursorSensitivity = 15;
+		private			 ChartAnchor editingAnchor;
+		private			 bool		 hasSetZOrder;
+		private			 bool		 extendZone		   = true;
+		private			 string 	 labelText		   = "M15";
+		private			 int		 labelSize		   = 0;
+		private 		 Brush 		 labelBrush		   = Brushes.Coral;
+		private	readonly DeviceBrush labelBrushDevice  = new DeviceBrush();
+		private 		 int		 labelOpacity	   = 30;
+		private 		 int		 labelOffset	   = 0;
 
 		public override bool SupportsAlerts { get { return true; } }
 
 		#endregion
-
-		#region Anchors
 		
-		public override IEnumerable<ChartAnchor> Anchors
+		#region OnStateChange
+		
+		protected override void OnStateChange()
 		{
-			get { return new[] { StartAnchor, EndAnchor }; }
+			if(State == State.SetDefaults)
+			{
+				DrawingState	 = DrawingState.Building;
+				AnchorLineStroke = new Stroke(Brushes.DarkGray, DashStyleHelper.Dash, 1f);
+				AreaBrush		 = Brushes.Coral;
+				AreaOpacity		 = 15;
+				OutlineStroke	 = new Stroke(Brushes.Coral, DashStyleHelper.Solid, 2f, 60);
+				ExtendZone		 = false;
+				LabelText		 = "";
+				labelSize		 = 0;
+				LabelBrush		 = Brushes.Coral;
+				LabelOpacity	 = 30;
+				LabelOffset		 = 0;
+				
+				StartAnchor = new ChartAnchor
+				{
+                    IsBrowsable = true,
+                    IsEditing	= true,
+					DrawingTool = this,
+					DisplayName = Custom.Resource.NinjaScriptDrawingToolAnchorStart,
+				};
+				
+				EndAnchor = new ChartAnchor
+				{
+                    IsBrowsable = true,
+					IsEditing	= true,
+					DrawingTool	= this,
+					DisplayName = Custom.Resource.NinjaScriptDrawingToolAnchorEnd,
+				};
+				
+				ZOrderType = DrawingToolZOrder.AlwaysDrawnFirst;
+			}
+			else if(State == State.Terminated)
+			{
+				Dispose();
+			}
 		}
-		
+
 		#endregion
 		
 		#region Properties
+		
+		public override IEnumerable<ChartAnchor> Anchors { get { return new[] { StartAnchor, EndAnchor }; } }
 		
 		[Display(Order = 1)]
 		public ChartAnchor StartAnchor { get; set; }
@@ -228,14 +265,16 @@ namespace NinjaTrader.NinjaScript.DrawingTools
 
 		public override Cursor GetCursor(ChartControl chartControl, ChartPanel chartPanel, ChartScale chartScale, Point point)
 		{
-			switch (DrawingState)
+			switch(DrawingState)
 			{
 				case DrawingState.Building	: return Cursors.Pen;
 				case DrawingState.Editing	: return IsLocked ? Cursors.No : Cursors.SizeNS;
 				case DrawingState.Moving	: return IsLocked ? Cursors.No : Cursors.SizeAll;
 				default:
-					Point		startAnchorPixelPoint	= StartAnchor.GetPoint(chartControl, chartPanel, chartScale);
-					ChartAnchor	closest					= GetClosestAnchor(chartControl, chartPanel, chartScale, cursorSensitivity, point);
+					
+					Point		startAnchorPixelPoint = StartAnchor.GetPoint(chartControl, chartPanel, chartScale);
+					ChartAnchor	closest				  = GetClosestAnchor(chartControl, chartPanel, chartScale, cursorSensitivity, point);
+					
 					if(closest != null)
 					{
 						if(IsLocked)
@@ -247,10 +286,12 @@ namespace NinjaTrader.NinjaScript.DrawingTools
 
 					Point	endAnchorPixelPoint	= EndAnchor.GetPoint(chartControl, chartPanel, chartScale);
 					Vector	totalVector			= endAnchorPixelPoint - startAnchorPixelPoint;
+					
 					if(MathHelper.IsPointAlongVector(point, startAnchorPixelPoint, totalVector, cursorSensitivity))
+					{
 						return IsLocked ? Cursors.Arrow : Cursors.SizeAll;
+					}
 
-					// check if cursor is along zone edges
 					foreach(Point anchorPoint in new[] {startAnchorPixelPoint, endAnchorPixelPoint})
 					{
 						if(Math.Abs(anchorPoint.Y - point.Y) <= cursorSensitivity)
@@ -258,6 +299,7 @@ namespace NinjaTrader.NinjaScript.DrawingTools
 							return IsLocked ? Cursors.Arrow : Cursors.SizeAll;
 						}
 					}
+					
 					return null;
 			}
 		}
@@ -268,15 +310,15 @@ namespace NinjaTrader.NinjaScript.DrawingTools
 		
 		public override Point[] GetSelectionPoints(ChartControl chartControl, ChartScale chartScale)
 		{
-			ChartPanel	chartPanel	= chartControl.ChartPanels[PanelIndex];
-			Point		startPoint	= StartAnchor.GetPoint(chartControl, chartPanel, chartScale);
-			Point		endPoint	= EndAnchor.GetPoint(chartControl, chartPanel, chartScale);
+			ChartPanel chartPanel = chartControl.ChartPanels[PanelIndex];
+			Point	   startPoint = StartAnchor.GetPoint(chartControl, chartPanel, chartScale);
+			Point	   endPoint	  = EndAnchor.GetPoint(chartControl, chartPanel, chartScale);
 
-			double		middleX		= chartPanel.X + chartPanel.W / 2;
-			double		middleY		= chartPanel.Y + chartPanel.H / 2;
-			Point		midPoint	= new Point((startPoint.X + endPoint.X) / 2, (startPoint.Y + endPoint.Y) / 2);
+			double	   middleX	= chartPanel.X + chartPanel.W / 2;
+			double	   middleY	= chartPanel.Y + chartPanel.H / 2;
+			Point	   midPoint	= new Point((startPoint.X + endPoint.X) / 2, (startPoint.Y + endPoint.Y) / 2);
 			
-			return new[] { startPoint, endPoint };//.Select(p => new Point(middleX, p.Y)).ToArray();
+			return new[] { startPoint, endPoint };
 		}
 
 		#endregion
@@ -294,16 +336,16 @@ namespace NinjaTrader.NinjaScript.DrawingTools
 		
 		public override bool IsAlertConditionTrue(AlertConditionItem conditionItem, Condition condition, ChartAlertValue[] values, ChartControl chartControl, ChartScale chartScale)
 		{
-			double		minPrice	= Anchors.Min(a => a.Price);
-			double		maxPrice	= Anchors.Max(a => a.Price);
-			DateTime	minTime		= Anchors.Min(a => a.Time);
-			DateTime	maxTime		= Anchors.Max(a => a.Time);
+			double	 minPrice = Anchors.Min(a => a.Price);
+			double	 maxPrice = Anchors.Max(a => a.Price);
+			DateTime minTime  = Anchors.Min(a => a.Time);
 
 			Predicate<ChartAlertValue> predicate = v =>
 			{
-				bool isInside = v.Value >= minPrice && v.Value <= maxPrice;
+				bool   isInside  =  v.Value >= minPrice && v.Value <= maxPrice && v.Time >= minTime;
 				return condition == Condition.CrossInside ? isInside : !isInside;
 			};
+			
 			return MathHelper.DidPredicateCross(values, predicate);
 		}
 
@@ -317,14 +359,8 @@ namespace NinjaTrader.NinjaScript.DrawingTools
 			{
 				return true;
 			}
-
-			// check if active y range highlight is on scale or cross through
-			if(Anchors.Any(a => a.Price <= chartScale.MaxValue && a.Price >= chartScale.MinValue))
-			{
-				return true;
-			}
 			
-			return StartAnchor.Price <= chartScale.MinValue && EndAnchor.Price >= chartScale.MaxValue || EndAnchor.Price <= chartScale.MinValue && StartAnchor.Price >= chartScale.MaxValue;
+			return Anchors.Any(a => a.Price <= chartScale.MaxValue && a.Price >= chartScale.MinValue && lastTimeOnChart >= a.Time);
 		}
 
 		#endregion
@@ -336,14 +372,16 @@ namespace NinjaTrader.NinjaScript.DrawingTools
 			MinValue = double.MaxValue;
 			MaxValue = double.MinValue;
 
-			if (!IsVisible)
+			if(!IsVisible)
+			{
 				return;
+			}
 
-				foreach (ChartAnchor anchor in Anchors)
-				{
-					MinValue = Math.Min(anchor.Price, MinValue);
-					MaxValue = Math.Max(anchor.Price, MaxValue);
-				}
+			foreach(ChartAnchor anchor in Anchors)
+			{
+				MinValue = Math.Min(anchor.Price, MinValue);
+				MaxValue = Math.Max(anchor.Price, MaxValue);
+			}
 		}
 
 		#endregion
@@ -355,9 +393,7 @@ namespace NinjaTrader.NinjaScript.DrawingTools
 			switch (DrawingState)
 			{
 				case DrawingState.Building:
-
-					//dataPoint.Time = chartControl.FirstTimePainted.AddSeconds((chartControl.LastTimePainted - chartControl.FirstTimePainted).TotalSeconds / 2);
-
+					
 					if(StartAnchor.IsEditing)
 					{
 						dataPoint.CopyDataValues(StartAnchor);
@@ -366,21 +402,21 @@ namespace NinjaTrader.NinjaScript.DrawingTools
 					}
 					else if(EndAnchor.IsEditing)
 					{
-						//dataPoint.Time		= StartAnchor.Time;
-						//dataPoint.SlotIndex	= StartAnchor.SlotIndex;
-
 						dataPoint.CopyDataValues(EndAnchor);
 						EndAnchor.IsEditing = false;
 					}
 					if(!StartAnchor.IsEditing && !EndAnchor.IsEditing)
 					{
-						DrawingState	= DrawingState.Normal;
-						IsSelected		= false;
+						DrawingState = DrawingState.Normal;
+						IsSelected	 = false;
 					}
 					break;
+					
 				case DrawingState.Normal:
-					Point point = dataPoint.GetPoint(chartControl, chartPanel, chartScale);
+					
+					Point point   = dataPoint.GetPoint(chartControl, chartPanel, chartScale);
 					editingAnchor = GetClosestAnchor(chartControl, chartPanel, chartScale, cursorSensitivity, point);
+					
 					if(editingAnchor != null)
 					{
 						editingAnchor.IsEditing = true;
@@ -389,13 +425,21 @@ namespace NinjaTrader.NinjaScript.DrawingTools
 					else
 					{
 						if(GetCursor(chartControl, chartPanel, chartScale, point) == Cursors.SizeAll)
+						{
 							DrawingState = DrawingState.Moving;
+						}
 						else if(GetCursor(chartControl, chartPanel, chartScale, point) == Cursors.SizeWE || GetCursor(chartControl, chartPanel, chartScale, point) == Cursors.SizeNS)
+						{
 							DrawingState = DrawingState.Editing;
+						}
 						else if(GetCursor(chartControl, chartPanel, chartScale, point) == Cursors.Arrow)
+						{
 							DrawingState = DrawingState.Editing;
+						}
 						else if(GetCursor(chartControl, chartPanel, chartScale, point) == null)
+						{
 							IsSelected = false;
+						}
 					}
 					break;
 			}
@@ -407,19 +451,25 @@ namespace NinjaTrader.NinjaScript.DrawingTools
 		
 		public override void OnMouseMove(ChartControl chartControl, ChartPanel chartPanel, ChartScale chartScale, ChartAnchor dataPoint)
 		{
-			if (IsLocked && DrawingState != DrawingState.Building)
-				return;
-			if (DrawingState == DrawingState.Building && EndAnchor.IsEditing)
+			if(IsLocked && DrawingState != DrawingState.Building)
 			{
-				//dataPoint.Time = chartControl.FirstTimePainted.AddSeconds((chartControl.LastTimePainted - chartControl.FirstTimePainted).TotalSeconds / 2);
-			
+				return;
+			}
+			if(DrawingState == DrawingState.Building && EndAnchor.IsEditing)
+			{
 				dataPoint.CopyDataValues(EndAnchor);
 			}
-			else if (DrawingState == DrawingState.Editing && editingAnchor != null)
+			else if(DrawingState == DrawingState.Editing && editingAnchor != null)
+			{
 				dataPoint.CopyDataValues(editingAnchor);
-			else if (DrawingState == DrawingState.Moving)
-				foreach (ChartAnchor anchor in Anchors)
+			}
+			else if(DrawingState == DrawingState.Moving)
+			{
+				foreach(ChartAnchor anchor in Anchors)
+				{
 					anchor.MoveAnchor(InitialMouseDownAnchor, dataPoint, chartControl, chartPanel, chartScale, this);
+				}
+			}
 		}
 
 		#endregion
@@ -428,40 +478,13 @@ namespace NinjaTrader.NinjaScript.DrawingTools
 		
 		public override void OnMouseUp(ChartControl chartControl, ChartPanel chartPanel, ChartScale chartScale, ChartAnchor dataPoint)
 		{
-			if (DrawingState == DrawingState.Building)
+			if(DrawingState == DrawingState.Building)
+			{
 				return;
-
-			DrawingState		= DrawingState.Normal;
-			editingAnchor		= null;
-		}
-
-		#endregion
-		
-		#region OnStateChange
-		
-		protected override void OnStateChange()
-		{
-			if(State == State.SetDefaults)
-			{
-				AnchorLineStroke	= new Stroke(Brushes.DarkGray, DashStyleHelper.Dash, 1f);
-				AreaBrush			= Brushes.Coral;
-				AreaOpacity			= 15;
-				DrawingState		= DrawingState.Building;
-				OutlineStroke		= new Stroke(Brushes.Coral, DashStyleHelper.Solid, 2f, 60);
-				StartAnchor			= new ChartAnchor { DisplayName = Custom.Resource.NinjaScriptDrawingToolAnchorStart, IsEditing = true, DrawingTool = this };
-				EndAnchor			= new ChartAnchor { DisplayName = Custom.Resource.NinjaScriptDrawingToolAnchorEnd, IsEditing = true, DrawingTool = this };
-				ZOrderType			= DrawingToolZOrder.AlwaysDrawnFirst;
-				ExtendZone			= false;
-				LabelText			= "";
-				labelSize			= 0;
-				LabelBrush			= Brushes.Coral;
-				LabelOpacity		= 30;
-				LabelOffset			= 0;
 			}
-			else if(State == State.Terminated)
-			{
-				Dispose();
-			}
+
+			DrawingState  = DrawingState.Normal;
+			editingAnchor = null;
 		}
 
 		#endregion
@@ -470,59 +493,69 @@ namespace NinjaTrader.NinjaScript.DrawingTools
 		
 		public override void OnRender(ChartControl chartControl, ChartScale chartScale)
 		{
-			if(!hasSetZOrder && !StartAnchor.IsNinjaScriptDrawn)
-			{
-				ZOrderType	 = DrawingToolZOrder.Normal;
-				ZOrder		 = ChartPanel.ChartObjects.Min(z => z.ZOrder) - 1;
-				hasSetZOrder = true;
-			}
-			
-			RenderTarget.AntialiasMode = SharpDX.Direct2D1.AntialiasMode.PerPrimitive;
-			Stroke outlineStroke	   = OutlineStroke;
-			outlineStroke.RenderTarget = RenderTarget;
-			ChartPanel	chartPanel	   = chartControl.ChartPanels[PanelIndex];
-		
-			Point startPoint = StartAnchor.GetPoint(chartControl, chartPanel, chartScale);
-			Point endPoint	 = EndAnchor.GetPoint(chartControl, chartPanel, chartScale);
-		
-			AnchorLineStroke.RenderTarget = RenderTarget;
-
-			if(!IsInHitTest && AreaBrush != null)
-			{
-				if(areaBrushDevice.Brush == null)
-				{
-					Brush brushCopy			= areaBrush.Clone();
-					brushCopy.Opacity		= areaOpacity / 100d; 
-					areaBrushDevice.Brush	= brushCopy;
-				}
-				areaBrushDevice.RenderTarget = RenderTarget;
-			}
-			else
-			{
-				areaBrushDevice.RenderTarget = null;
-				areaBrushDevice.Brush = null;
-			}
-			
-			if(!IsInHitTest && LabelBrush != null)
-			{
-				if(labelBrushDevice.Brush == null)
-				{
-					Brush brushCopy			= labelBrush.Clone();
-					brushCopy.Opacity		= labelOpacity / 100d; 
-					labelBrushDevice.Brush	= brushCopy;
-				}
-				labelBrushDevice.RenderTarget = RenderTarget;
-			}
-			else
-			{
-				labelBrushDevice.RenderTarget = null;
-				labelBrushDevice.Brush = null;
-			}
-			
 			ChartBars cb = GetAttachedToChartBars();
 			
-			if(chartControl.GetXByBarIndex(cb, cb.ToIndex) >= Math.Min(startPoint.X, endPoint.X))
+			if(cb == null)
 			{
+				return;
+			}
+			
+			double	 minPrice = Anchors.Min(a => a.Price);
+			double	 maxPrice = Anchors.Max(a => a.Price);
+			DateTime minTime = Anchors.Min(a => a.Time);
+			DateTime marTime = chartControl.GetTimeByX(chartControl.GetXByBarIndex(cb, cb.ToIndex));
+			
+			if((minPrice <= chartScale.MaxValue || maxPrice >= chartScale.MinValue) && marTime >= minTime)
+			{
+				if(!hasSetZOrder && !StartAnchor.IsNinjaScriptDrawn)
+				{
+					ZOrderType	 = DrawingToolZOrder.Normal;
+					ZOrder		 = ChartPanel.ChartObjects.Min(z => z.ZOrder) - 1;
+					hasSetZOrder = true;
+				}
+				
+				RenderTarget.AntialiasMode = SharpDX.Direct2D1.AntialiasMode.PerPrimitive;
+				Stroke outlineStroke	   = OutlineStroke;
+				outlineStroke.RenderTarget = RenderTarget;
+				ChartPanel	chartPanel	   = chartControl.ChartPanels[PanelIndex];
+			
+				Point startPoint = StartAnchor.GetPoint(chartControl, chartPanel, chartScale);
+				Point endPoint	 = EndAnchor.GetPoint(chartControl, chartPanel, chartScale);
+				
+				AnchorLineStroke.RenderTarget = RenderTarget;
+
+				if(!IsInHitTest && AreaBrush != null)
+				{
+					if(areaBrushDevice.Brush == null)
+					{
+						Brush brushCopy			= areaBrush.Clone();
+						brushCopy.Opacity		= areaOpacity / 100d; 
+						areaBrushDevice.Brush	= brushCopy;
+					}
+					areaBrushDevice.RenderTarget = RenderTarget;
+				}
+				else
+				{
+					areaBrushDevice.RenderTarget = null;
+					areaBrushDevice.Brush = null;
+				}
+				
+				if(!IsInHitTest && LabelBrush != null)
+				{
+					if(labelBrushDevice.Brush == null)
+					{
+						Brush brushCopy			= LabelBrush.Clone();
+						brushCopy.Opacity		= LabelOpacity / 100d; 
+						labelBrushDevice.Brush	= brushCopy;
+					}
+					labelBrushDevice.RenderTarget = RenderTarget;
+				}
+				else
+				{
+					labelBrushDevice.RenderTarget = null;
+					labelBrushDevice.Brush = null;
+				}
+				
 				int barFullWidth = chartControl.GetBarPaintWidth(cb);
 				int barHalfWidth = (int)Math.Round(barFullWidth / 2.0);
 
@@ -596,7 +629,7 @@ namespace NinjaTrader.NinjaScript.DrawingTools
 			return Tuple.Create(tl.Metrics.Width, lm.Baseline - yOffset);
 		}
 		
-		#endregion;
+		#endregion
 	}
 
 	#region Interface
