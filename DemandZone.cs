@@ -16,13 +16,13 @@ using NinjaTrader.Gui.Chart;
 namespace NinjaTrader.NinjaScript.DrawingTools
 {
 	[CLSCompliant(false)]
-	public class SupplyZone : DrawingTool
+	public class DemandZone : DrawingTool
 	{
 		#region Variables
 		
 		private			 bool		 logErrors		   = true;
 		private			 int		 areaOpacity	   = 15;
-		private			 Brush		 areaBrush		   = Brushes.Coral;
+		private			 Brush		 areaBrush		   = Brushes.LightGreen;
 		private	readonly DeviceBrush areaBrushDevice   = new DeviceBrush();
 		private	const	 double		 cursorSensitivity = 15;
 		private			 ChartAnchor editingAnchor;
@@ -30,7 +30,7 @@ namespace NinjaTrader.NinjaScript.DrawingTools
 		private			 bool		 extendZone		   = true;
 		private			 string 	 labelText		   = "M15";
 		private			 int		 labelSize		   = 0;
-		private 		 Brush 		 labelBrush		   = Brushes.Coral;
+		private 		 Brush 		 labelBrush		   = Brushes.LightGreen;
 		private	readonly DeviceBrush labelBrushDevice  = new DeviceBrush();
 		private 		 int		 labelOpacity	   = 30;
 		private 		 int		 labelOffset	   = 0;
@@ -47,13 +47,13 @@ namespace NinjaTrader.NinjaScript.DrawingTools
 			{
 				DrawingState	 = DrawingState.Building;
 				AnchorLineStroke = new Stroke(Brushes.DarkGray, DashStyleHelper.Dash, 1f);
-				AreaBrush		 = Brushes.Coral;
+				AreaBrush		 = Brushes.LightGreen;
 				AreaOpacity		 = 15;
-				OutlineStroke	 = new Stroke(Brushes.Coral, DashStyleHelper.Solid, 2f, 60);
+				OutlineStroke	 = new Stroke(Brushes.LightGreen, DashStyleHelper.Solid, 2f, 60);
 				ExtendZone		 = false;
 				LabelText		 = "";
 				labelSize		 = 0;
-				LabelBrush		 = Brushes.Coral;
+				LabelBrush		 = Brushes.LightGreen;
 				LabelOpacity	 = 30;
 				LabelOffset		 = 0;
 				
@@ -276,7 +276,7 @@ namespace NinjaTrader.NinjaScript.DrawingTools
 		{
 			yield return new AlertConditionItem 
 			{
-				Name					= "Supply Zone",
+				Name					= "Demand Zone",
 				ShouldOnlyDisplayName	= true,
 			};
 		}
@@ -763,12 +763,12 @@ namespace NinjaTrader.NinjaScript.DrawingTools
 		
 		#endregion
 	}
-	
+
 	#region Draw
 	
 	public static partial class Draw
 	{
-		private static SupplyZone SupplyZoneCore(
+		private static DemandZone DemandZoneCore(
 			NinjaScriptBase owner,
 			string tag,
 			bool isAutoScale,
@@ -810,20 +810,20 @@ namespace NinjaTrader.NinjaScript.DrawingTools
 					tag = GlobalDrawingToolManager.GlobalDrawingToolTagPrefix + tag;
 				}
 				
-				SupplyZone supplyZone = DrawingTool.GetByTagOrNew(owner, typeof(SupplyZone), tag, templateName) as SupplyZone;
+				DemandZone demandZone = DrawingTool.GetByTagOrNew(owner, typeof(DemandZone), tag, templateName) as DemandZone;
 				
-				if(supplyZone == null)
+				if(demandZone == null)
 				{
 					return null;
 				}
 				
-				DrawingTool.SetDrawingToolCommonValues(supplyZone, tag, isAutoScale, owner, isGlobal);
+				DrawingTool.SetDrawingToolCommonValues(demandZone, tag, isAutoScale, owner, isGlobal);
 				
 				ChartAnchor	startAnchor	= DrawingTool.CreateChartAnchor(owner, startBarsAgo, startTime, startY);
 				ChartAnchor	endAnchor	= DrawingTool.CreateChartAnchor(owner, endBarsAgo, endTime, endY);
 				
-				startAnchor.CopyDataValues(supplyZone.StartAnchor);
-				endAnchor.CopyDataValues(supplyZone.EndAnchor);
+				startAnchor.CopyDataValues(demandZone.StartAnchor);
+				endAnchor.CopyDataValues(demandZone.EndAnchor);
 				
 				//
 				// Area
@@ -831,12 +831,12 @@ namespace NinjaTrader.NinjaScript.DrawingTools
 				
 				if(areaBrush != null)
 				{
-					supplyZone.AreaBrush = areaBrush.Clone();
+					demandZone.AreaBrush = areaBrush.Clone();
 				}
 				
 				if(areaOpacity >= 0)
 				{
-					supplyZone.AreaOpacity = areaOpacity;
+					demandZone.AreaOpacity = areaOpacity;
 				}
 				
 				//
@@ -845,22 +845,22 @@ namespace NinjaTrader.NinjaScript.DrawingTools
 				
 				if(lineBrush != null)
 				{
-					supplyZone.OutlineStroke = new Stroke(lineBrush.Clone());
+					demandZone.OutlineStroke = new Stroke(lineBrush.Clone());
 					
 					if(lineStyle != null)
 					{
-						supplyZone.OutlineStroke.DashStyleHelper = lineStyle;
+						demandZone.OutlineStroke.DashStyleHelper = lineStyle;
 					}
 				}
 				
 				if(lineWidth >= 0)
 				{
-					supplyZone.OutlineStroke.Width = (float)lineWidth;
+					demandZone.OutlineStroke.Width = (float)lineWidth;
 				}
 				
 				if(lineOpacity >= 0)
 				{
-					supplyZone.OutlineStroke.Opacity = Math.Max(0, Math.Min(100, lineOpacity));
+					demandZone.OutlineStroke.Opacity = Math.Max(0, Math.Min(100, lineOpacity));
 				}
 				
 				//
@@ -869,27 +869,27 @@ namespace NinjaTrader.NinjaScript.DrawingTools
 				
 				if(labelText != "")
 				{
-					supplyZone.LabelText = labelText;
+					demandZone.LabelText = labelText;
 				}
 				
 				if(labelSize >= 0)
 				{
-					supplyZone.LabelSize = labelSize;
+					demandZone.LabelSize = labelSize;
 				}
 				
 				if(labelBrush != null)
 				{
-					supplyZone.LabelBrush = labelBrush.Clone();
+					demandZone.LabelBrush = labelBrush.Clone();
 				}
 				
 				if(labelOpacity >= 0)
 				{
-					supplyZone.LabelOpacity = labelOpacity;
+					demandZone.LabelOpacity = labelOpacity;
 				}
 				
 				if(labelOffset >= 0)
 				{
-					supplyZone.LabelOffset = labelOffset;
+					demandZone.LabelOffset = labelOffset;
 				}
 				
 				//
@@ -898,12 +898,12 @@ namespace NinjaTrader.NinjaScript.DrawingTools
 				
 				if(extendZone != null)
 				{
-					supplyZone.ExtendZone = extendZone;
+					demandZone.ExtendZone = extendZone;
 				}
 				
-				supplyZone.SetState(State.Active);
+				demandZone.SetState(State.Active);
 				
-				return supplyZone;
+				return demandZone;
 			}
 			catch(Exception e)
 			{}
@@ -912,7 +912,7 @@ namespace NinjaTrader.NinjaScript.DrawingTools
 		}
 		
 		/// <summary>
-		/// Draws a supply zone.
+		/// Draws a demand zone.
 		/// </summary>
 		/// <param name="owner">The hosting NinjaScript object which is calling the draw method</param>
 		/// <param name="tag">A user defined unique id used to reference the draw object</param>
@@ -936,7 +936,7 @@ namespace NinjaTrader.NinjaScript.DrawingTools
 		/// <param name="templateName">The name of the drawing tool template the object will use to determine various visual properties</param>
 		/// <returns></returns>
 		[CLSCompliant(false)]
-		public static SupplyZone SupplyZone(
+		public static DemandZone DemandZone(
 			NinjaScriptBase owner,
 			string tag,
 			bool isAutoScale,
@@ -959,7 +959,7 @@ namespace NinjaTrader.NinjaScript.DrawingTools
 			bool isGlobal,
 			string templateName
 		) {
-			return SupplyZoneCore(
+			return DemandZoneCore(
 				owner, tag, isAutoScale, startBarsAgo, Core.Globals.MinDate, startY, endBarsAgo, Core.Globals.MinDate, endY,
 				areaBrush, areaOpacity, 
 				lineBrush, lineWidth, lineOpacity, lineStyle,
@@ -969,7 +969,7 @@ namespace NinjaTrader.NinjaScript.DrawingTools
 		}
 		
 		/// <summary>
-		/// Draws a supply zone.
+		/// Draws a demand zone.
 		/// </summary>
 		/// <param name="owner">The hosting NinjaScript object which is calling the draw method</param>
 		/// <param name="tag">A user defined unique id used to reference the draw object</param>
@@ -993,7 +993,7 @@ namespace NinjaTrader.NinjaScript.DrawingTools
 		/// <param name="templateName">The name of the drawing tool template the object will use to determine various visual properties</param>
 		/// <returns></returns>
 		[CLSCompliant(false)]
-		public static SupplyZone SupplyZone(
+		public static DemandZone DemandZone(
 			NinjaScriptBase owner,
 			string tag,
 			bool isAutoScale,
@@ -1016,7 +1016,7 @@ namespace NinjaTrader.NinjaScript.DrawingTools
 			bool isGlobal,
 			string templateName
 		) {
-			return SupplyZoneCore(
+			return DemandZoneCore(
 				owner, tag, isAutoScale, int.MinValue, startTime, startY, int.MinValue, endTime, endY,
 				areaBrush, areaOpacity, 
 				lineBrush, lineWidth, lineOpacity, lineStyle,
@@ -1026,7 +1026,7 @@ namespace NinjaTrader.NinjaScript.DrawingTools
 		}
 		
 		/// <summary>
-		/// Draws a supply zone.
+		/// Draws a demand zone.
 		/// </summary>
 		/// <param name="owner">The hosting NinjaScript object which is calling the draw method</param>
 		/// <param name="tag">A user defined unique id used to reference the draw object</param>
@@ -1042,7 +1042,7 @@ namespace NinjaTrader.NinjaScript.DrawingTools
 		/// <param name="templateName">The name of the drawing tool template the object will use to determine various visual properties</param>
 		/// <returns></returns>
 		[CLSCompliant(false)]
-		public static SupplyZone SupplyZone(
+		public static DemandZone DemandZone(
 			NinjaScriptBase owner,
 			string tag,
 			bool isAutoScale,
@@ -1056,7 +1056,7 @@ namespace NinjaTrader.NinjaScript.DrawingTools
 			bool isGlobal,
 			string templateName
 		) {
-			return SupplyZoneCore(
+			return DemandZoneCore(
 				owner, tag, isAutoScale, startBarsAgo, Core.Globals.MinDate, startY, endBarsAgo, Core.Globals.MinDate, endY,
 				null, -1, 
 				null, -1, -1, DashStyleHelper.Solid,
@@ -1066,7 +1066,7 @@ namespace NinjaTrader.NinjaScript.DrawingTools
 		}
 		
 		/// <summary>
-		/// Draws a supply zone.
+		/// Draws a demand zone.
 		/// </summary>
 		/// <param name="owner">The hosting NinjaScript object which is calling the draw method</param>
 		/// <param name="tag">A user defined unique id used to reference the draw object</param>
@@ -1082,7 +1082,7 @@ namespace NinjaTrader.NinjaScript.DrawingTools
 		/// <param name="templateName">The name of the drawing tool template the object will use to determine various visual properties</param>
 		/// <returns></returns>
 		[CLSCompliant(false)]
-		public static SupplyZone SupplyZone(
+		public static DemandZone DemandZone(
 			NinjaScriptBase owner,
 			string tag,
 			bool isAutoScale,
@@ -1096,7 +1096,7 @@ namespace NinjaTrader.NinjaScript.DrawingTools
 			bool isGlobal,
 			string templateName
 		) {
-			return SupplyZoneCore(
+			return DemandZoneCore(
 				owner, tag, isAutoScale, int.MinValue, startTime, startY, int.MinValue, endTime, endY,
 				null, -1, 
 				null, -1, -1, DashStyleHelper.Solid,
